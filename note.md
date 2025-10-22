@@ -1564,8 +1564,8 @@ This lab demonstrates:
 - ✅ **GitHub Actions** for CI/CD automation
 - ✅ **Multi-OS testing** with matrix strategies
 - ✅ **Debugging CI/CD workflows** and path issues
-- ⏳ **Unit testing** with CMocka framework
-- ⏳ **Test integration** into CI/CD pipelines
+- ✅ **Unit testing** with CMocka framework
+- ✅ **Test integration** into CI/CD pipelines
 
 > [!TIP]
 > **Useful Git Commands:**
