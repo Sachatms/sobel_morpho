@@ -992,7 +992,563 @@ Creates 9 jobs (3 OS × 3 Python versions) automatically!
 - **Cross-platform compatibility** - Ensure code works on all target platforms
 - **Automated testing** - No manual building/testing needed
 - **Fast feedback** - Know within minutes if changes break anything
-- **Professional workflow** - Industry-standard CI/CD practices---
+- **Professional workflow** - Industry-standard CI/CD practices
+
+---
+
+## Part 5: Unit Testing Integration
+
+> **Assignment** - Add unit tests to the project and integrate them into the GitHub Actions CI/CD pipeline to ensure code quality.
+
+### Context: Why Unit Testing?
+
+**Unit testing** is the practice of writing automated tests for individual components (functions, classes) to verify they work correctly. Benefits include:
+
+- ✅ **Early bug detection** - Find issues before they reach production
+- ✅ **Regression prevention** - Ensure new changes don't break existing functionality
+- ✅ **Documentation** - Tests show how code is intended to be used
+- ✅ **Refactoring confidence** - Make changes knowing tests will catch errors
+- ✅ **CI/CD integration** - Automated quality gates
+
+### Testing Framework Selection
+
+For this C project, we'll use **CMocka** - a lightweight unit testing framework for C:
+
+**Why CMocka?**
+- ✅ Pure C (no C++ required)
+- ✅ Easy to integrate with CMake
+- ✅ Mock support for testing in isolation
+- ✅ Good documentation and examples
+- ✅ Available in most package managers
+
+**Alternatives:**
+- **Unity** - Minimal, embedded-friendly
+- **Check** - Fork-based isolation
+- **Google Test** - Powerful but requires C++
+
+### ✅ Step 1: Project Structure with Tests
+
+Create a `tests/` directory to organize unit tests:
+
+```
+lab2_git/
+├── CMakeLists.txt              # Root build configuration
+├── src/
+│   ├── sobel.c                 # Implementation
+│   ├── sobel.h                 # Header
+│   ├── main.c                  # Main program
+│   └── ...
+└── tests/
+    ├── CMakeLists.txt          # Test build configuration
+    ├── test_sobel.c            # Tests for sobel filter
+    └── test_yuv.c              # Tests for YUV functions (optional)
+```
+
+### ✅ Step 2: Create Test Files
+
+**tests/test_sobel.c** - Unit tests for the Sobel/mean filter:
+
+```c
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
+#include <string.h>
+#include "../src/sobel.h"
+
+// Test: Mean filter on uniform image returns same value
+static void test_mean_filter_uniform_image(void **state) {
+    (void) state; // Unused
+
+    // Create a 5x5 uniform image (all pixels = 100)
+    unsigned char input[25];
+    unsigned char output[25];
+    memset(input, 100, 25);
+    memset(output, 0, 25);
+
+    // Apply mean filter
+    sobel(5, 5, input, output);
+
+    // Interior pixels should be 100 (average of 9 pixels all valued 100)
+    // Check center pixel
+    assert_int_equal(output[1 * 5 + 1], 100);
+    assert_int_equal(output[1 * 5 + 2], 100);
+    assert_int_equal(output[2 * 5 + 1], 100);
+}
+
+// Test: Mean filter smooths a gradient
+static void test_mean_filter_gradient(void **state) {
+    (void) state;
+
+    // Create a 5x5 gradient image (horizontal gradient)
+    unsigned char input[25] = {
+        0,   50,  100, 150, 200,
+        0,   50,  100, 150, 200,
+        0,   50,  100, 150, 200,
+        0,   50,  100, 150, 200,
+        0,   50,  100, 150, 200
+    };
+    unsigned char output[25];
+    memset(output, 0, 25);
+
+    // Apply mean filter
+    sobel(5, 5, input, output);
+
+    // Center pixel should be average of its 3x3 neighborhood
+    // For position [2,2] (center): (100*3 + 150*3 + 50*3) / 9 = 100
+    assert_int_equal(output[1 * 5 + 2], 100);
+}
+
+// Test: Mean filter edge handling (edges should be 0)
+static void test_mean_filter_edge_handling(void **state) {
+    (void) state;
+
+    unsigned char input[25];
+    unsigned char output[25];
+    memset(input, 100, 25);
+    memset(output, 255, 25); // Fill with non-zero
+
+    sobel(5, 5, input, output);
+
+    // Left edge should be 0
+    assert_int_equal(output[0 * 5 + 0], 0);
+    assert_int_equal(output[1 * 5 + 0], 0);
+    assert_int_equal(output[2 * 5 + 0], 0);
+
+    // Right edge should be 0
+    assert_int_equal(output[0 * 5 + 4], 0);
+    assert_int_equal(output[1 * 5 + 4], 0);
+    assert_int_equal(output[2 * 5 + 4], 0);
+}
+
+// Test: Zero image input
+static void test_mean_filter_zero_image(void **state) {
+    (void) state;
+
+    unsigned char input[25];
+    unsigned char output[25];
+    memset(input, 0, 25);
+    memset(output, 255, 25);
+
+    sobel(5, 5, input, output);
+
+    // All interior pixels should be 0
+    assert_int_equal(output[1 * 5 + 1], 0);
+    assert_int_equal(output[2 * 5 + 2], 0);
+}
+
+// Test: Maximum value handling (255)
+static void test_mean_filter_max_value(void **state) {
+    (void) state;
+
+    unsigned char input[25];
+    unsigned char output[25];
+    memset(input, 255, 25);
+    memset(output, 0, 25);
+
+    sobel(5, 5, input, output);
+
+    // All interior pixels should be 255
+    assert_int_equal(output[1 * 5 + 1], 255);
+    assert_int_equal(output[2 * 5 + 2], 255);
+}
+
+int main(void) {
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_mean_filter_uniform_image),
+        cmocka_unit_test(test_mean_filter_gradient),
+        cmocka_unit_test(test_mean_filter_edge_handling),
+        cmocka_unit_test(test_mean_filter_zero_image),
+        cmocka_unit_test(test_mean_filter_max_value),
+    };
+
+    return cmocka_run_group_tests(tests, NULL, NULL);
+}
+```
+
+**Key test cases:**
+- **Uniform image** - All pixels same value, output should match
+- **Gradient** - Verify averaging calculation is correct
+- **Edge handling** - Verify edges are set to 0 as expected
+- **Boundary values** - Test with 0 and 255 (min/max pixel values)
+
+### ✅ Step 3: Configure CMake for Tests
+
+**tests/CMakeLists.txt** - Build configuration for tests:
+
+```cmake
+# Find CMocka package
+find_package(cmocka REQUIRED)
+
+# Test for Sobel filter
+add_executable(test_sobel test_sobel.c ../src/sobel.c)
+target_link_libraries(test_sobel cmocka)
+target_include_directories(test_sobel PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
+# Add test to CTest
+add_test(NAME SobelTests COMMAND test_sobel)
+
+# Enable testing
+enable_testing()
+```
+
+**Update root CMakeLists.txt** to include tests:
+
+```cmake
+# Add at the end of CMakeLists.txt
+option(BUILD_TESTING "Build the testing tree" ON)
+
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+```
+
+### ✅ Step 4: Install CMocka
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get install libcmocka-dev
+```
+
+**Fedora/RHEL:**
+```bash
+sudo dnf install libcmocka-devel
+```
+
+**macOS (Homebrew):**
+```bash
+brew install cmocka
+```
+
+**Windows (vcpkg):**
+```bash
+vcpkg install cmocka
+```
+
+**NixOS (add to flake.nix):**
+```nix
+buildInputs = [
+  cmake
+  SDL2
+  SDL2_ttf
+  cmocka  # Add this
+];
+```
+
+### ✅ Step 5: Build and Run Tests Locally
+
+```bash
+# Configure with tests enabled
+mkdir -p build
+cd build
+cmake .. -DBUILD_TESTING=ON
+
+# Build everything including tests
+make
+
+# Run all tests
+ctest --output-on-failure
+
+# Or run tests directly
+./tests/test_sobel
+```
+
+**Expected output:**
+```
+[==========] Running 5 test(s).
+[ RUN      ] test_mean_filter_uniform_image
+[       OK ] test_mean_filter_uniform_image
+[ RUN      ] test_mean_filter_gradient
+[       OK ] test_mean_filter_gradient
+[ RUN      ] test_mean_filter_edge_handling
+[       OK ] test_mean_filter_edge_handling
+[ RUN      ] test_mean_filter_zero_image
+[       OK ] test_mean_filter_zero_image
+[ RUN      ] test_mean_filter_max_value
+[       OK ] test_mean_filter_max_value
+[==========] 5 test(s) run.
+[  PASSED  ] 5 test(s).
+```
+
+### ✅ Step 6: Integrate Tests into GitHub Actions
+
+Update `.github/workflows/ubuntu-ci.yml` to run tests:
+
+```yaml
+name: Ubuntu CI with Tests
+
+on:
+  push:
+    branches: [ main, workspace_sacha ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential libsdl2-dev libsdl2-ttf-dev libcmocka-dev clang-format
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DBUILD_TESTING=ON
+
+    - name: Build project
+      run: |
+        cd build
+        make
+
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure
+
+    - name: Verify build
+      run: |
+        if [ -f "build/sobel" ] || [ -f "build/Debug/sobel" ]; then
+          echo "✅ Ubuntu build successful"
+        else
+          echo "❌ Ubuntu build failed"
+          exit 1
+        fi
+```
+
+**Key additions:**
+- Added `libcmocka-dev` to dependencies
+- Added `-DBUILD_TESTING=ON` to CMake configuration
+- Added "Run tests" step with `ctest --output-on-failure`
+
+### ✅ Step 7: Update Matrix Workflow with Tests
+
+Update `.github/workflows/multi-os-matrix.yml`:
+
+```yaml
+name: Multi-OS CI with Tests (Matrix)
+
+on:
+  push:
+    branches: [ main, workspace_sacha ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            executable: sobel
+            build_command: make
+            test_command: ctest --output-on-failure
+            install_deps: |
+              sudo apt-get update
+              sudo apt-get install -y cmake build-essential libsdl2-dev libsdl2-ttf-dev libcmocka-dev
+          - os: windows-latest
+            executable: sobel.exe
+            build_command: cmake --build . --config Release
+            test_command: ctest -C Release --output-on-failure
+            install_deps: ""
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: ${{ matrix.install_deps }}
+
+    - name: Setup MSBuild (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Install CMocka (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        git clone https://git.cryptomilk.org/projects/cmocka.git
+        cd cmocka
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_INSTALL_PREFIX=C:/cmocka
+        cmake --build . --config Release --target install
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DBUILD_TESTING=ON
+
+    - name: Build project
+      working-directory: build
+      run: ${{ matrix.build_command }}
+
+    - name: Run tests
+      working-directory: build
+      run: ${{ matrix.test_command }}
+
+    - name: Verify build (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      working-directory: build
+      run: |
+        if [ -f "${{ matrix.executable }}" ] || [ -f "Debug/${{ matrix.executable }}" ]; then
+          echo "✅ Build successful on ${{ matrix.os }}"
+        else
+          echo "❌ Build failed on ${{ matrix.os }}"
+          ls -la
+          exit 1
+        fi
+
+    - name: Verify build (Windows)
+      if: matrix.os == 'windows-latest'
+      working-directory: build
+      run: |
+        if (Test-Path "Release/${{ matrix.executable }}") {
+          Write-Host "✅ Build successful on ${{ matrix.os }}"
+        } else {
+          Write-Host "❌ Build failed on ${{ matrix.os }}"
+          Get-ChildItem -Recurse
+          exit 1
+        }
+```
+
+### What We Learned
+
+#### Unit Testing Concepts
+- **Test-Driven Development (TDD)** - Write tests before implementation
+- **Test coverage** - Percentage of code exercised by tests
+- **Edge cases** - Testing boundary conditions (0, 255, edges)
+- **Regression testing** - Ensure fixes don't break later
+- **Continuous testing** - Run tests on every commit
+
+#### CMocka Framework
+- **`cmocka_unit_test()`** - Define a test function
+- **`assert_int_equal()`** - Verify integer values match
+- **`cmocka_run_group_tests()`** - Execute test suite
+- **Setup/teardown** - Optional initialization/cleanup functions
+- **Mock support** - Can mock function calls for isolation
+
+#### CMake Testing Integration
+- **`enable_testing()`** - Enable CTest support
+- **`add_test()`** - Register a test with CTest
+- **`BUILD_TESTING`** - Optional flag to enable/disable tests
+- **`ctest`** - CMake's test runner
+
+#### Testing Best Practices
+- ✅ **One assertion per test** - Makes failures clear
+- ✅ **Test names describe behavior** - `test_mean_filter_uniform_image`
+- ✅ **Test edge cases** - Zero, max values, boundaries
+- ✅ **Independent tests** - Tests shouldn't depend on each other
+- ✅ **Fast tests** - Unit tests should run in milliseconds
+- ✅ **Deterministic** - Same input always gives same result
+
+#### CI/CD Testing Strategy
+```
+On every push:
+1. Build code → Compilation check
+2. Run tests → Functional correctness
+3. Check coverage → Quality metric
+4. Verify artifacts → Deployment readiness
+```
+
+#### Test Coverage Tools (Optional Enhancement)
+```bash
+# Generate coverage report with gcov/lcov
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON
+make
+ctest
+lcov --capture --directory . --output-file coverage.info
+genhtml coverage.info --output-directory coverage_report
+```
+
+#### Why This Matters
+- **Quality assurance** - Catch bugs before users do
+- **Refactoring safety** - Change code confidently
+- **Documentation** - Tests show intended usage
+- **Regression prevention** - Old bugs stay fixed
+- **Team collaboration** - Clear expectations for code behavior
+- **Professional practice** - Industry standard for serious projects
+
+### Common Testing Patterns
+
+#### Test Structure (AAA Pattern)
+```c
+static void test_example(void **state) {
+    // ARRANGE - Set up test data
+    unsigned char input[25];
+    memset(input, 100, 25);
+    
+    // ACT - Execute the function under test
+    sobel(5, 5, input, output);
+    
+    // ASSERT - Verify the result
+    assert_int_equal(output[12], 100);
+}
+```
+
+#### Parameterized Tests (CMocka)
+```c
+static void test_with_params(void **state) {
+    int value = (int)(uintptr_t)*state;
+    assert_true(value > 0);
+}
+
+int main(void) {
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_prestate(test_with_params, (void*)10),
+        cmocka_unit_test_prestate(test_with_params, (void*)20),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
+}
+```
+
+### Troubleshooting
+
+**CMocka not found:**
+```bash
+# Check if installed
+pkg-config --modversion cmocka
+
+# Ubuntu: Install from package manager
+sudo apt-get install libcmocka-dev
+
+# Or build from source
+git clone https://git.cryptomilk.org/projects/cmocka.git
+cd cmocka && mkdir build && cd build
+cmake .. && make && sudo make install
+```
+
+**Tests fail to link:**
+```cmake
+# Make sure to link CMocka
+target_link_libraries(test_sobel cmocka)
+
+# Include source directory
+target_include_directories(test_sobel PRIVATE ${CMAKE_SOURCE_DIR}/src)
+```
+
+**CTest doesn't find tests:**
+```cmake
+# Must call enable_testing() before add_test()
+enable_testing()
+add_test(NAME MyTest COMMAND test_executable)
+```
+
+---
 
 ## Summary
 
@@ -1008,6 +1564,8 @@ This lab demonstrates:
 - ✅ **GitHub Actions** for CI/CD automation
 - ✅ **Multi-OS testing** with matrix strategies
 - ✅ **Debugging CI/CD workflows** and path issues
+- ⏳ **Unit testing** with CMocka framework
+- ⏳ **Test integration** into CI/CD pipelines
 
 > [!TIP]
 > **Useful Git Commands:**

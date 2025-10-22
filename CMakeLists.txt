@@ -326,3 +326,13 @@ file(
 
 add_executable( sobel ${source_files} ${header_files})
 target_link_libraries(sobel ${SDL2_LIBRARY} ${SDL2TTF_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_EXTRA_LIB})
+
+# *******************************************
+# *************** Unit Tests ****************
+# *******************************************
+option(BUILD_TESTING "Build the testing tree" ON)
+
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

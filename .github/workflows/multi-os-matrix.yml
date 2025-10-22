@@ -19,9 +19,11 @@ jobs:
           - os: ubuntu-latest
             executable: sobel
             build_command: make
+            test_command: ctest --output-on-failure
           - os: windows-latest
             executable: sobel.exe
             build_command: cmake --build . --config Release
+            test_command: ctest -C Release --output-on-failure
 
     steps:
     - name: Checkout repository
@@ -31,21 +33,35 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake build-essential libsdl2-dev libsdl2-ttf-dev
+        sudo apt-get install -y cmake build-essential libsdl2-dev libsdl2-ttf-dev libcmocka-dev
 
     - name: Setup MSBuild (Windows)
       if: matrix.os == 'windows-latest'
       uses: microsoft/setup-msbuild@v2
 
+    - name: Install CMocka (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        git clone https://git.cryptomilk.org/projects/cmocka.git
+        cd cmocka
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_INSTALL_PREFIX=C:/cmocka
+        cmake --build . --config Release --target install
+
     - name: Configure CMake
       run: |
         mkdir build
         cd build
-        cmake ..
+        cmake .. -DBUILD_TESTING=ON
 
     - name: Build project
       working-directory: build
       run: ${{ matrix.build_command }}
+
+    - name: Run tests
+      working-directory: build
+      run: ${{ matrix.test_command }}
 
     - name: Verify build (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
