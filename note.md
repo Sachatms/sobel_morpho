@@ -893,16 +893,26 @@ jobs:
 
     - name: Verify build (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
+      working-directory: build
       run: |
-        if [ -f "build/${{ matrix.executable }}" ]; then
+        if [ -f "${{ matrix.executable }}" ] || [ -f "Debug/${{ matrix.executable }}" ]; then
           echo "✅ Build successful on ${{ matrix.os }}"
+        else
+          echo "❌ Build failed on ${{ matrix.os }}"
+          ls -la
+          exit 1
         fi
 
     - name: Verify build (Windows)
       if: matrix.os == 'windows-latest'
+      working-directory: build
       run: |
-        if (Test-Path "build/Release/${{ matrix.executable }}") {
+        if (Test-Path "Release/${{ matrix.executable }}") {
           Write-Host "✅ Build successful on ${{ matrix.os }}"
+        } else {
+          Write-Host "❌ Build failed on ${{ matrix.os }}"
+          Get-ChildItem -Recurse
+          exit 1
         }
 ```
 
@@ -910,9 +920,13 @@ jobs:
 - **Single job definition** that runs on multiple OS
 - **Matrix variables**: `${{ matrix.os }}`, `${{ matrix.executable }}`, etc.
 - **Conditional steps**: Use `if:` to run OS-specific commands
+- **Working directory**: Uses `working-directory: build` for consistency
+- **Debug output**: Shows directory contents on build failure
 - **Pros**: Less code duplication, easier to add more OS
 - **Cons**: All jobs must follow similar structure
 - **Use case**: When build process is similar across platforms
+
+> **Note:** Initial implementation had a path issue where verification was looking for `build/sobel` from the root directory, but since `working-directory: build` was used for the build step, the executable was at `sobel` relative to the build directory. This was fixed by adding `working-directory: build` to the verification steps and adjusting the paths accordingly.
 
 ### Comparison: Discrete Jobs vs Matrix Strategy
 
@@ -924,27 +938,9 @@ jobs:
 | **Readability** | Clear separation of concerns | More compact, uses conditionals |
 | **Best for** | Very different build processes | Similar builds across platforms |
 
-### How to Test the Workflows
+### Verification
 
-**Option 1: Push to GitHub**
-```bash
-git add .github/workflows/
-git commit -m "ci: Add GitHub Actions workflows for multi-OS builds"
-git push origin workspace_sacha
-```
-
-Then check: `https://github.com/Sachatms/sobel_morpho/actions`
-
-**Option 2: Manual trigger (workflow_dispatch)**
-1. Go to your repository on GitHub
-2. Click "Actions" tab
-3. Select the workflow
-4. Click "Run workflow" button
-5. Choose the branch and click "Run workflow"
-
-**Option 3: Create a pull request**
-- Workflows automatically run on PR creation/updates
-- Results appear in the PR status checks
+![Github Action Tab with our 3 actions](github_action_tab.png)
 
 ### What We Learned
 
@@ -1005,13 +1001,13 @@ This lab demonstrates:
 - ✅ **Forking and cloning** repositories with GitHub CLI
 - ✅ **Remote management** (origin vs upstream)
 - ✅ **Branch creation** and switching
-- ⏳ **Cherry-picking commits** between branches
-- ⏳ **Interactive rebasing** to rewrite history
-- ⏳ **Pull requests** from forks
-- ⏳ **Git hooks** for enforcing code quality
-- ⏳ **GitHub Actions** for CI/CD automation
-- ⏳ **Multi-OS testing** with matrix strategies
-- ⏳ **Unit testing** integration
+- ✅ **Cherry-picking commits** between branches
+- ✅ **Resolving merge conflicts** during cherry-pick
+- ✅ **Pull requests** from forks
+- ✅ **Git hooks** for enforcing code quality
+- ✅ **GitHub Actions** for CI/CD automation
+- ✅ **Multi-OS testing** with matrix strategies
+- ✅ **Debugging CI/CD workflows** and path issues
 
 > [!TIP]
 > **Useful Git Commands:**
