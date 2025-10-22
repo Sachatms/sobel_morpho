@@ -49,20 +49,24 @@ jobs:
 
     - name: Verify build (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
+      working-directory: build
       run: |
-        if [ -f "build/${{ matrix.executable }}" ] || [ -f "build/Debug/${{ matrix.executable }}" ]; then
+        if [ -f "${{ matrix.executable }}" ] || [ -f "Debug/${{ matrix.executable }}" ]; then
           echo "✅ Build successful on ${{ matrix.os }}"
         else
           echo "❌ Build failed on ${{ matrix.os }}"
+          ls -la
           exit 1
         fi
 
     - name: Verify build (Windows)
       if: matrix.os == 'windows-latest'
+      working-directory: build
       run: |
-        if (Test-Path "build/Release/${{ matrix.executable }}") {
+        if (Test-Path "Release/${{ matrix.executable }}") {
           Write-Host "✅ Build successful on ${{ matrix.os }}"
         } else {
           Write-Host "❌ Build failed on ${{ matrix.os }}"
+          Get-ChildItem -Recurse
           exit 1
         }
