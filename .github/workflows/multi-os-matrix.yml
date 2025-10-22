@@ -1,0 +1,68 @@
+name: Multi-OS CI (Matrix Strategy)
+
+on:
+  push:
+    branches: [ main, workspace_sacha ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            executable: sobel
+            build_command: make
+          - os: windows-latest
+            executable: sobel.exe
+            build_command: cmake --build . --config Release
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential libsdl2-dev libsdl2-ttf-dev
+
+    - name: Setup MSBuild (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: microsoft/setup-msbuild@v2
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+
+    - name: Build project
+      working-directory: build
+      run: ${{ matrix.build_command }}
+
+    - name: Verify build (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        if [ -f "build/${{ matrix.executable }}" ] || [ -f "build/Debug/${{ matrix.executable }}" ]; then
+          echo "✅ Build successful on ${{ matrix.os }}"
+        else
+          echo "❌ Build failed on ${{ matrix.os }}"
+          exit 1
+        fi
+
+    - name: Verify build (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        if (Test-Path "build/Release/${{ matrix.executable }}") {
+          Write-Host "✅ Build successful on ${{ matrix.os }}"
+        } else {
+          Write-Host "❌ Build failed on ${{ matrix.os }}"
+          exit 1
+        }

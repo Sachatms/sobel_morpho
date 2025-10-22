@@ -1,0 +1,45 @@
+name: Ubuntu CI
+
+on:
+  push:
+    branches: [ main, workspace_sacha ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential libsdl2-dev libsdl2-ttf-dev clang-format
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+
+    - name: Build project
+      run: |
+        cd build
+        make
+
+    - name: List build artifacts
+      run: |
+        ls -la build/
+
+    - name: Check if executable exists
+      run: |
+        if [ -f "build/sobel" ] || [ -f "build/Debug/sobel" ] || [ -f "build/Release/sobel" ]; then
+          echo "✅ Build successful - executable found"
+        else
+          echo "❌ Build failed - executable not found"
+          exit 1
+        fi

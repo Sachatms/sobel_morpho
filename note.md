@@ -677,14 +677,110 @@ This enables automatic code formatting checks before commits.
 
 > **Assignment** - Set up GitHub Actions workflows to automatically build and test the project on Ubuntu and Windows for every push and manual trigger.
 
-### Workflow 1: Ubuntu CI
+### Context: What are GitHub Actions?
 
-Create `.github/workflows/ubuntu-ci.yml`:
+**GitHub Actions** is GitHub's built-in CI/CD (Continuous Integration/Continuous Deployment) platform that allows you to:
+- **Automate builds** - Compile your code on every push
+- **Run tests** - Execute unit tests automatically
+- **Multi-platform testing** - Test on Linux, Windows, macOS simultaneously
+- **Quality checks** - Run linters, formatters, security scans
+- **Deployment** - Automatically deploy to production
+
+**Why use GitHub Actions?**
+- ✅ Integrated into GitHub (no external service needed)
+- ✅ Free for public repositories
+- ✅ Extensive marketplace of pre-built actions
+- ✅ Supports multiple languages and platforms
+- ✅ Parallel execution for faster builds
+
+### Workflow Anatomy
+
+A GitHub Actions workflow consists of:
+
+```yaml
+name: <workflow-name>          # Display name in GitHub UI
+on: <trigger-events>           # When to run (push, pull_request, etc.)
+
+jobs:
+  <job-name>:
+    runs-on: <environment>     # OS to run on (ubuntu-latest, windows-latest)
+    steps:
+      - name: <step-name>
+        uses: <action>         # Pre-built action from marketplace
+      - name: <step-name>
+        run: |                 # Shell commands
+          <commands>
+```
+
+### ✅ Step 1: Create Ubuntu CI Workflow
+
+Created `.github/workflows/ubuntu-ci.yml`:
 
 ```yaml
 name: Ubuntu CI
+
 on:
   push:
+    branches: [ main, workspace_sacha ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential libsdl2-dev libsdl2-ttf-dev clang-format
+
+
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+
+    - name: Build project
+      run: |
+        cd build
+        make
+
+    - name: Verify build
+      run: |
+        if [ -f "build/sobel" ] || [ -f "build/Debug/sobel" ]; then
+          echo "✅ Ubuntu build successful"
+        else
+          echo "❌ Ubuntu build failed"
+          exit 1
+        fi
+```
+
+**Key components:**
+- **Triggers**: Runs on push to main/workspace_sacha, pull requests, and manual dispatch
+- **Runner**: Uses latest Ubuntu image (`ubuntu-latest`)
+- **Checkout**: Uses `actions/checkout@v4` to clone the repository
+- **Dependencies**: Installs CMake, build tools, and SDL2 libraries
+- **Build**: Creates build directory, configures with CMake, compiles with make
+- **Verification**: Checks if executable was created successfully
+
+### ✅ Step 2: Multi-OS with Discrete Jobs
+
+Created `.github/workflows/multi-os-discrete.yml`:
+
+```yaml
+name: Multi-OS CI (Discrete Jobs)
+
+on:
+  push:
+    branches: [ main, workspace_sacha ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -693,41 +789,83 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake build-essential libsdl2-dev clang-format
-
-    - name: Build project
+        sudo apt-get install -y cmake build-essential libsdl2-dev libsdl2-ttf-dev
+    - name: Configure CMake
       run: |
         mkdir build
         cd build
         cmake ..
-        make
-
-    - name: Run program
+    - name: Build project
       run: |
         cd build
-        ./sobel_morpho
+        make
+    - name: Verify build
+      run: |
+        if [ -f "build/sobel" ]; then
+          echo "✅ Ubuntu build successful"
+        fi
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+    - name: Build project
+      run: |
+        cd build
+        cmake --build . --config Release
+    - name: Verify build
+      run: |
+        if (Test-Path "build/Release/sobel.exe") {
+          Write-Host "✅ Windows build successful"
+        }
 ```
 
-### Workflow 2: Multi-OS CI (Matrix Strategy)
+**Discrete jobs approach:**
+- **Separate jobs** for Ubuntu and Windows
+- **Pros**: Each job can have completely different steps and commands
+- **Cons**: More verbose, code duplication between jobs
+- **Use case**: When OS-specific behavior differs significantly
 
-Create `.github/workflows/multi-os-ci.yml`:
+### ✅ Step 3: Multi-OS with Matrix Strategy
+
+Created `.github/workflows/multi-os-matrix.yml`:
 
 ```yaml
-name: Multi-OS CI
+name: Multi-OS CI (Matrix Strategy)
+
 on:
   push:
+    branches: [ main, workspace_sacha ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            executable: sobel
+            build_command: make
+          - os: windows-latest
+            executable: sobel.exe
+            build_command: cmake --build . --config Release
 
     steps:
     - name: Checkout repository
@@ -737,51 +875,128 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake build-essential libsdl2-dev
+        sudo apt-get install -y cmake build-essential libsdl2-dev libsdl2-ttf-dev
 
-    - name: Install dependencies (Windows)
+    - name: Setup MSBuild (Windows)
       if: matrix.os == 'windows-latest'
-      run: |
-        # Windows dependencies (if needed)
-        choco install cmake
+      uses: microsoft/setup-msbuild@v2
 
-    - name: Build project
+    - name: Configure CMake
       run: |
         mkdir build
         cd build
         cmake ..
-        cmake --build .
 
-    - name: Run program
+    - name: Build project
+      working-directory: build
+      run: ${{ matrix.build_command }}
+
+    - name: Verify build (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
       run: |
-        cd build
-        ./sobel_morpho
+        if [ -f "build/${{ matrix.executable }}" ]; then
+          echo "✅ Build successful on ${{ matrix.os }}"
+        fi
+
+    - name: Verify build (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        if (Test-Path "build/Release/${{ matrix.executable }}") {
+          Write-Host "✅ Build successful on ${{ matrix.os }}"
+        }
 ```
 
-### TODO: Add Unit Tests
+**Matrix strategy approach:**
+- **Single job definition** that runs on multiple OS
+- **Matrix variables**: `${{ matrix.os }}`, `${{ matrix.executable }}`, etc.
+- **Conditional steps**: Use `if:` to run OS-specific commands
+- **Pros**: Less code duplication, easier to add more OS
+- **Cons**: All jobs must follow similar structure
+- **Use case**: When build process is similar across platforms
 
-1. **Create test files:**
-   - `tests/test_sobel.c`
-   - `tests/test_dilation.c`
-   - `tests/test_erosion.c`
+### Comparison: Discrete Jobs vs Matrix Strategy
 
-2. **Modify `CMakeLists.txt`:**
-   ```cmake
-   enable_testing()
+| Aspect | Discrete Jobs | Matrix Strategy |
+|--------|--------------|-----------------|
+| **Code duplication** | High (separate job per OS) | Low (single job definition) |
+| **Flexibility** | Very flexible, completely different steps | Must follow similar structure |
+| **Scalability** | Hard to add new OS (copy entire job) | Easy to add new OS (add to matrix) |
+| **Readability** | Clear separation of concerns | More compact, uses conditionals |
+| **Best for** | Very different build processes | Similar builds across platforms |
 
-   add_executable(test_sobel tests/test_sobel.c src/sobel.c)
-   add_test(NAME SobelTest COMMAND test_sobel)
-   ```
+### How to Test the Workflows
 
-3. **Add test step to workflow:**
-   ```yaml
-   - name: Run unit tests
-     run: |
-       cd build
-       ctest --output-on-failure
-   ```
+**Option 1: Push to GitHub**
+```bash
+git add .github/workflows/
+git commit -m "ci: Add GitHub Actions workflows for multi-OS builds"
+git push origin workspace_sacha
+```
 
----
+Then check: `https://github.com/Sachatms/sobel_morpho/actions`
+
+**Option 2: Manual trigger (workflow_dispatch)**
+1. Go to your repository on GitHub
+2. Click "Actions" tab
+3. Select the workflow
+4. Click "Run workflow" button
+5. Choose the branch and click "Run workflow"
+
+**Option 3: Create a pull request**
+- Workflows automatically run on PR creation/updates
+- Results appear in the PR status checks
+
+### What We Learned
+
+#### GitHub Actions Concepts
+- **Workflows** - YAML files in `.github/workflows/` that define automation
+- **Jobs** - Independent units of work that run on separate runners
+- **Steps** - Sequential commands within a job
+- **Runners** - Virtual machines that execute jobs (ubuntu-latest, windows-latest, macos-latest)
+- **Actions** - Reusable units (from marketplace or custom)
+
+#### Workflow Triggers (`on:`)
+- **`push`** - Runs on every push to specified branches
+- **`pull_request`** - Runs on PR creation/update
+- **`workflow_dispatch`** - Enables manual triggering from GitHub UI
+- **`schedule`** - Runs on a cron schedule
+- **`release`** - Runs when a release is published
+
+#### Matrix Strategy
+```yaml
+strategy:
+  matrix:
+    os: [ubuntu-latest, windows-latest, macos-latest]
+    python-version: [3.8, 3.9, 3.10]
+```
+Creates 9 jobs (3 OS × 3 Python versions) automatically!
+
+#### Conditional Execution
+- **`if: matrix.os == 'ubuntu-latest'`** - Run step only on Ubuntu
+- **`if: success()`** - Run only if previous steps succeeded
+- **`if: failure()`** - Run only if a step failed
+- **`if: always()`** - Always run (useful for cleanup)
+
+#### Common Actions
+- **`actions/checkout@v4`** - Clone the repository
+- **`actions/setup-python@v5`** - Install Python
+- **`actions/upload-artifact@v4`** - Save build artifacts
+- **`microsoft/setup-msbuild@v2`** - Setup MSBuild for Windows
+
+#### Best Practices
+- ✅ Use specific action versions (`@v4` not `@latest`)
+- ✅ Add `workflow_dispatch` for manual testing
+- ✅ Use `fail-fast: false` to see all platform failures
+- ✅ Cache dependencies to speed up builds
+- ✅ Verify build outputs before declaring success
+- ✅ Use matrix for similar builds, discrete jobs for different ones
+
+#### Why This Matters
+- **Quality assurance** - Catch build failures before merging
+- **Cross-platform compatibility** - Ensure code works on all target platforms
+- **Automated testing** - No manual building/testing needed
+- **Fast feedback** - Know within minutes if changes break anything
+- **Professional workflow** - Industry-standard CI/CD practices---
 
 ## Summary
 
