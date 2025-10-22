@@ -1491,10 +1491,10 @@ static void test_example(void **state) {
     // ARRANGE - Set up test data
     unsigned char input[25];
     memset(input, 100, 25);
-    
+
     // ACT - Execute the function under test
     sobel(5, 5, input, output);
-    
+
     // ASSERT - Verify the result
     assert_int_equal(output[12], 100);
 }
